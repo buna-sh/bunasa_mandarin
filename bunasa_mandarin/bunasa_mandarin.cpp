@@ -1,5 +1,5 @@
 ﻿#include <iostream>
-#include "bunasa_mandarin.h"
+#include "Headers/info.h"
 
 using namespace std;
 
