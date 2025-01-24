@@ -1,8 +1,9 @@
-﻿// bunasa_mandarin.h : Include file for standard system include files,
-// or project specific include files.
+﻿#ifndef BUNASA_MANDARIN_H
+#define BUNASA_MANDARIN_H
 
-#pragma once
+#include <string>
 
-#include <iostream>
+extern double VERSION;  // Declare VERSION as an external variable
+extern std::string CODENAME;  // Declare CODENAME as an external variable
 
-// TODO: Reference additional headers your program requires here.
+#endif // BUNASA_MANDARIN_H

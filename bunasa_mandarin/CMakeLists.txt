@@ -3,7 +3,7 @@
 #
 
 # Add source to this project's executable.
-add_executable (bunasa_mandarin "bunasa_mandarin.cpp" "bunasa_mandarin.h")
+add_executable (bunasa_mandarin "bunasa_mandarin.cpp" "bunasa_mandarin.h" "info.cpp")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET bunasa_mandarin PROPERTY CXX_STANDARD 20)
