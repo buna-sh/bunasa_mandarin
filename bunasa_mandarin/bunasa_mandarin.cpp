@@ -133,6 +133,24 @@ std::string FetchDiskUsage() {
     return diskUsage;
 }
 
+std::string FetchRAMUsage() {
+    char buffer[128];
+    std::string ramUsage = "RAM Usage: ";
+    FILE* fp = popen("free -h | grep Mem", "r");  // Fetch memory info
+    if (fp == nullptr) {
+        ramUsage += "Error fetching RAM usage";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            ramUsage += buffer;  // Add memory usage information
+        }
+        fclose(fp);
+    }
+    return ramUsage;
+}
+
+
+
+
 // Export logs to a .txt file
 void ExportLogsToFile(const std::string& filename)
 {
@@ -235,13 +253,16 @@ void RenderImGui()
         std::string uptime = FetchSystemUptime();
         std::string battery = FetchBatteryStatus();  // Fetch battery status with charging info
         std::string disk = FetchDiskUsage();
+        std::string ram = FetchRAMUsage();  // Fetch RAM usage
 
         ImGui::Text("%s", uptime.c_str());
         ImGui::Text("%s", battery.c_str());  // Show battery and charging info
         ImGui::Text("%s", disk.c_str());
+        ImGui::Text("%s", ram.c_str());  // Show RAM usage
 
         ImGui::End();
     }
+
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
