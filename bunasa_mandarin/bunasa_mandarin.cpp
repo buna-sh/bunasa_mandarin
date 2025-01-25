@@ -3,25 +3,30 @@
 #include <string>
 #include <thread>
 #include <atomic>
-#include <cstdlib>  // For system() call
-#include <chrono>   // For time handling
+#include <cstdlib>
+#include <chrono>
+#include <fstream>  // For writing to a file
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include <GL/gl.h>
+#include <mutex>  // For mutex to protect shared resources
 
 #include "Headers/info.h"
 
-bool showUI = false;  // Flag to track if UI should be shown
-bool showLogs = false;  // Flag to track if log window should be shown
-bool showNetworkMonitor = false;  // Flag to track if network monitor window should be shown
-std::atomic<bool> isPinging(false);  // Flag to control ping operation
-std::vector<std::string> websiteStatuses;  // Stores the status of websites and IPs
-std::vector<std::string> logs;  // Stores logs of past week
-std::vector<std::string> websites = {"google.com", "8.8.8.8", "github.com", "192.168.1.1"};  // Websites and IPs to ping
+bool showUI = false;
+bool showLogs = false;
+bool showNetworkMonitor = false;
+bool showHelp = false;
+bool showSystemInfo = false;
 
-// Ping function to get the status of a website or IP
+std::atomic<bool> isPinging(false);
+std::vector<std::string> websiteStatuses;
+std::vector<std::string> logs;
+std::vector<std::string> websites = {"google.com", "8.8.8.8", "github.com", "192.168.1.1"};
+std::mutex statusMutex;  
+
 std::string PingWebsite(const std::string& website)
 {
     std::string command = "ping -c 1 " + website + " > /dev/null 2>&1";  // Suppress output
@@ -32,19 +37,20 @@ std::string PingWebsite(const std::string& website)
         return website + ": Down";
 }
 
-// Function to generate logs
+
+
 void GenerateLog(const std::string& status)
 {
     logs.push_back(status);
-    if (logs.size() > 1000) {  // Limit logs to last 1000 entries (about a week of logs)
-        logs.erase(logs.begin());  // Remove the oldest entry
+    if (logs.size() > 1000)
+    {
+        logs.erase(logs.begin());
     }
 }
 
-// Function to fetch network stats
 std::string GetNetworkStats()
 {
-    std::string command = "ifstat -i wlp3s0 1 1";  // Fetch network stats for 1 second on eth0 interface (use appropriate interface)
+    std::string command = "ifstat -i wlp3s0 1 1";
     char buffer[128];
     std::string result = "";
     FILE* fp = popen(command.c_str(), "r");
@@ -56,6 +62,93 @@ std::string GetNetworkStats()
     }
     fclose(fp);
     return result;
+}
+
+// Fetch system uptime
+std::string FetchSystemUptime() {
+    char buffer[128];
+    std::string uptime = "Uptime: ";
+    FILE* fp = popen("uptime -p", "r");
+    if (fp == nullptr) {
+        uptime += "Error fetching uptime";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            uptime += buffer;
+        }
+        fclose(fp);
+    }
+    return uptime;
+}
+
+std::string batteryStatus;
+std::string batteryPercentage;
+
+// Fetch battery status
+std::string FetchBatteryStatus() {
+    char buffer[128];
+    std::string batteryStatus = "Battery: ";
+    
+    // Fetch battery percentage
+    FILE* fp = popen("upower -i /org/freedesktop/UPower/devices/battery_BAT0 | grep percentage", "r");
+    if (fp == nullptr) {
+        batteryStatus += "Error fetching battery percentage";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            batteryStatus += buffer;  // Add battery percentage to the status string
+        }
+        fclose(fp);
+    }
+    
+    // Fetch charging status
+    std::string chargingStatus = "Charging: ";
+    fp = popen("upower -i /org/freedesktop/UPower/devices/battery_BAT0 | grep state", "r");
+    if (fp == nullptr) {
+        chargingStatus += "Error fetching charging status";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            chargingStatus += buffer;  // Add charging status to the string
+        }
+        fclose(fp);
+    }
+
+    // Combine battery percentage and charging status
+    return batteryStatus + " | " + chargingStatus;
+}
+
+// Fetch disk usage
+std::string FetchDiskUsage() {
+    char buffer[128];
+    std::string diskUsage = "Disk Usage: ";
+    FILE* fp = popen("df -h /", "r");  // Use "df -h /" to directly get the root disk usage
+    if (fp == nullptr) {
+        diskUsage += "Error fetching disk usage";
+    } else {
+        // Skip the first line (header) and capture the second line
+        fgets(buffer, sizeof(buffer), fp);  // Skip header
+        if (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            diskUsage += buffer;  // Add the second line (disk usage information)
+        }
+        fclose(fp);
+    }
+    return diskUsage;
+}
+
+// Export logs to a .txt file
+void ExportLogsToFile(const std::string& filename)
+{
+    std::ofstream outFile(filename);
+    if (outFile.is_open())
+    {
+        for (const auto& log : logs)
+        {
+            outFile << log << std::endl;
+        }
+        outFile.close();
+    }
+    else
+    {
+        std::cerr << "Failed to open file for writing." << std::endl;
+    }
 }
 
 void SetupImGui(GLFWwindow* window)
@@ -74,6 +167,19 @@ void RenderImGui()
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+
+    if (showHelp)
+    {
+        ImGui::Begin("Help");
+
+        ImGui::Text("Help Screen:");
+        ImGui::Text("P - Toggle Ping UI");
+        ImGui::Text("L - Toggle Logs Window");
+        ImGui::Text("I - Toggle Network Monitor");
+        ImGui::Text("H - Show/Hide this Help Screen");
+
+        ImGui::End();
+    }
 
     if (showUI)  // Render UI only if the flag is true
     {
@@ -94,10 +200,15 @@ void RenderImGui()
 
         ImGui::End();
     }
-
-    if (showLogs)  // Render log window if the flag is true
+    if (showLogs)
     {
         ImGui::Begin("Status Logs");
+
+        // Export Button to export logs to a text file
+        if (ImGui::Button("Export Logs"))
+        {
+            ExportLogsToFile("logs.txt");  // Export the logs to logs.txt
+        }
 
         for (const auto& log : logs)
         {
@@ -107,13 +218,27 @@ void RenderImGui()
         ImGui::End();
     }
 
-    if (showNetworkMonitor)  // Render network monitor window if the flag is true
+    if (showNetworkMonitor)
     {
         ImGui::Begin("Network Monitor");
 
-        // Fetch and display network stats
         std::string stats = GetNetworkStats();
         ImGui::Text("Network Stats:\n%s", stats.c_str());
+
+        ImGui::End();
+    }
+
+    if (showSystemInfo)
+    {
+        ImGui::Begin("System Information");
+
+        std::string uptime = FetchSystemUptime();
+        std::string battery = FetchBatteryStatus();  // Fetch battery status with charging info
+        std::string disk = FetchDiskUsage();
+
+        ImGui::Text("%s", uptime.c_str());
+        ImGui::Text("%s", battery.c_str());  // Show battery and charging info
+        ImGui::Text("%s", disk.c_str());
 
         ImGui::End();
     }
@@ -124,50 +249,56 @@ void RenderImGui()
 
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-    if (key == GLFW_KEY_P && action == GLFW_PRESS)  // Check if "P" is pressed
+    if (key == GLFW_KEY_P && action == GLFW_PRESS)
     {
-        showUI = !showUI;  // Toggle the UI visibility
+        showUI = !showUI;
         if (showUI && !isPinging) {
             isPinging = true;
-            // Start a thread to ping websites every 10 seconds
             std::thread([]() {
                 while (isPinging) {
+                    std::lock_guard<std::mutex> lock(statusMutex);  // Lock to ensure thread safety
                     websiteStatuses.clear();
                     for (const auto& website : websites) {
                         std::string status = PingWebsite(website);
                         websiteStatuses.push_back(status);
-                        GenerateLog(status);  // Generate log entry for each ping
+                        GenerateLog(status);
                     }
-                    std::this_thread::sleep_for(std::chrono::seconds(10));  // Wait 10 seconds before next ping
+                    std::this_thread::sleep_for(std::chrono::seconds(10));
                 }
             }).detach();
         }
     }
 
-    if (key == GLFW_KEY_L && action == GLFW_PRESS)  // Check if "L" is pressed
+    if (key == GLFW_KEY_L && action == GLFW_PRESS)
     {
-        showLogs = !showLogs;  // Toggle the log window visibility
+        showLogs = !showLogs;
     }
 
-    if (key == GLFW_KEY_I && action == GLFW_PRESS)  // Check if "I" is pressed
+    if (key == GLFW_KEY_I && action == GLFW_PRESS)
     {
-        showNetworkMonitor = !showNetworkMonitor;  // Toggle the network monitor window visibility
+        showNetworkMonitor = !showNetworkMonitor;
+    }
+
+    if (key == GLFW_KEY_H && action == GLFW_PRESS)
+    {
+        showHelp = !showHelp;
+    }
+
+    if (key == GLFW_KEY_S && action == GLFW_PRESS)
+    {
+        showSystemInfo = !showSystemInfo;
     }
 }
 
-using namespace std;
-
 int main()
 {
-    cout << "Bunasa: VERSION: " << VERSION << " CODENAME: " << CODENAME << endl;
-    cout << "Author: Allexander Bergmans." << endl;
-    cout << "Co-Author: Toon Schuermans." << endl;
+    std::cout << "Bunasa: VERSION: " << VERSION << " CODENAME: " << CODENAME << std::endl;
+    std::cout << "Author: Allexander Bergmans." << std::endl;
+    std::cout << "Co-Author: Toon Schuermans." << std::endl;
 
-    // Initialize GLFW
     if (!glfwInit())
         return -1;
 
-    // Create a windowed mode window and its OpenGL context
     GLFWwindow* window = glfwCreateWindow(800, 600, "Bunasa", NULL, NULL);
     if (!window)
     {
@@ -178,28 +309,21 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    // Set the key callback
     glfwSetKeyCallback(window, KeyCallback);
 
-    // Setup ImGui
     SetupImGui(window);
 
-    // Main loop
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
 
-        // Clear screen
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Render ImGui (based on the flag)
         RenderImGui();
 
-        // Swap buffers
         glfwSwapBuffers(window);
     }
 
-    // Cleanup
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();

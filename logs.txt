@@ -1,0 +1,3 @@
+google.com: Up
+8.8.8.8: Up
+github.com: Up
