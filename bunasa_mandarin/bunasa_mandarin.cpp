@@ -1,4 +1,10 @@
 ﻿#include <iostream>
+#include <vector>
+#include <string>
+#include <thread>
+#include <atomic>
+#include <cstdlib>  // For system() call
+#include <chrono>   // For time handling
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -6,6 +12,33 @@
 #include <GL/gl.h>
 
 #include "Headers/info.h"
+
+bool showUI = false; // Flag to track if UI should be shown
+bool showLogs = false; // Flag to track if log window should be shown
+std::atomic<bool> isPinging(false); // Flag to control ping operation
+std::vector<std::string> websiteStatuses; // Stores the status of websites and IPs
+std::vector<std::string> logs; // Stores logs of past week
+std::vector<std::string> websites = {"google.com", "8.8.8.8", "github.com", "192.168.1.1"}; // Websites and IPs to ping
+
+// Ping function to get the status of a website or IP
+std::string PingWebsite(const std::string& website)
+{
+    std::string command = "ping -c 1 " + website + " > /dev/null 2>&1";  // Suppress output
+    int result = system(command.c_str());
+    if (result == 0)
+        return website + ": Up";
+    else
+        return website + ": Down";
+}
+
+// Function to generate logs
+void GenerateLog(const std::string& status)
+{
+    logs.push_back(status);
+    if (logs.size() > 1000) { // Limit logs to last 1000 entries (about a week of logs)
+        logs.erase(logs.begin()); // Remove the oldest entry
+    }
+}
 
 void SetupImGui(GLFWwindow* window)
 {
@@ -24,19 +57,74 @@ void RenderImGui()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("Hello, ImGui!");
-    ImGui::Text("This is a simple example!");
-    ImGui::End();
+    if (showUI) // Render UI only if the flag is true
+    {
+        ImGui::Begin("Ping Websites");
+
+        // Iterate over the websites and show status
+        for (const auto& status : websiteStatuses)
+        {
+            if (status.find("Up") != std::string::npos)
+            {
+                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "%s", status.c_str()); // Green for up
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "%s", status.c_str()); // Red for down
+            }
+        }
+
+        ImGui::End();
+    }
+
+    if (showLogs) // Render log window if the flag is true
+    {
+        ImGui::Begin("Status Logs");
+
+        for (const auto& log : logs)
+        {
+            ImGui::Text("%s", log.c_str());
+        }
+
+        ImGui::End();
+    }
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_P && action == GLFW_PRESS) // Check if "P" is pressed
+    {
+        showUI = !showUI; // Toggle the UI visibility
+        if (showUI && !isPinging) {
+            isPinging = true;
+            // Start a thread to ping websites every 10 seconds
+            std::thread([]() {
+                while (isPinging) {
+                    websiteStatuses.clear();
+                    for (const auto& website : websites) {
+                        std::string status = PingWebsite(website);
+                        websiteStatuses.push_back(status);
+                        GenerateLog(status); // Generate log entry for each ping
+                    }
+                    std::this_thread::sleep_for(std::chrono::seconds(10)); // Wait 10 seconds before next ping
+                }
+            }).detach();
+        }
+    }
+
+    if (key == GLFW_KEY_L && action == GLFW_PRESS) // Check if "L" is pressed
+    {
+        showLogs = !showLogs; // Toggle the log window visibility
+    }
 }
 
 using namespace std;
 
 int main()
 {
-
     cout << "Bunasa: VERSION: " << VERSION << " CODENAME: " << CODENAME << endl;
     cout << "Author: Allexander Bergmans." << endl;
     cout << "Co-Author: Toon Schuermans." << endl;
@@ -56,6 +144,9 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
+    // Set the key callback
+    glfwSetKeyCallback(window, KeyCallback);
+
     // Setup ImGui
     SetupImGui(window);
 
@@ -67,7 +158,7 @@ int main()
         // Clear screen
         glClear(GL_COLOR_BUFFER_BIT);
 
-        // Render ImGui
+        // Render ImGui (based on the flag)
         RenderImGui();
 
         // Swap buffers
