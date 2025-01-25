@@ -20,6 +20,7 @@ bool showLogs = false;
 bool showNetworkMonitor = false;
 bool showHelp = false;
 bool showSystemInfo = false;
+bool showCronJobs = false; 
 
 std::atomic<bool> isPinging(false);
 std::vector<std::string> websiteStatuses;
@@ -113,6 +114,27 @@ std::string FetchBatteryStatus() {
 
     // Combine battery percentage and charging status
     return batteryStatus + " | " + chargingStatus;
+}
+
+// Fetch the cron jobs
+std::vector<std::string> FetchCronJobs() {
+    std::vector<std::string> cronJobs;
+    std::string command = "cat /etc/crontab /etc/cron.d/* /var/spool/cron/crontabs/*";  // Combine the cron job files
+
+    // Open a process to run the command and capture the output
+    FILE* fp = popen(command.c_str(), "r");
+    if (fp == nullptr) {
+        std::cerr << "Failed to open process to fetch cron jobs." << std::endl;
+        return cronJobs;
+    }
+
+    char buffer[512];
+    while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+        cronJobs.push_back(buffer);  // Store each line as a cron job
+    }
+    fclose(fp);
+
+    return cronJobs;
 }
 
 // Fetch disk usage
@@ -218,6 +240,7 @@ void RenderImGui()
 
         ImGui::End();
     }
+
     if (showLogs)
     {
         ImGui::Begin("Status Logs");
@@ -263,10 +286,24 @@ void RenderImGui()
         ImGui::End();
     }
 
+    if (showCronJobs)  // Add this condition to show cron jobs window
+    {
+        ImGui::Begin("Cron Jobs");
+
+        std::vector<std::string> cronJobs = FetchCronJobs();  // Fetch the cron jobs
+
+        for (const auto& cronJob : cronJobs)
+        {
+            ImGui::Text("%s", cronJob.c_str());
+        }
+
+        ImGui::End();
+    }
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
+
 
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -308,6 +345,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
     if (key == GLFW_KEY_S && action == GLFW_PRESS)
     {
         showSystemInfo = !showSystemInfo;
+    }
+
+    if (key == GLFW_KEY_C && action == GLFW_PRESS) 
+    {
+        showCronJobs = !showCronJobs;
     }
 }
 
