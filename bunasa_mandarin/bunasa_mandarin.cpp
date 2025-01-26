@@ -21,6 +21,9 @@ bool showNetworkMonitor = false;
 bool showHelp = false;
 bool showSystemInfo = false;
 bool showCronJobs = false; 
+bool showNginxStatus = false;
+bool showInfoStatus = false;
+
 
 std::atomic<bool> isPinging(false);
 std::vector<std::string> websiteStatuses;
@@ -42,6 +45,7 @@ std::string PingWebsite(const std::string& website)
 
 void GenerateLog(const std::string& status)
 {
+    
     logs.push_back(status);
     if (logs.size() > 1000)
     {
@@ -191,6 +195,67 @@ void ExportLogsToFile(const std::string& filename)
     }
 }
 
+std::string FetchNginxStatus() {
+    char buffer[128];
+    std::string nginxStatus = "Nginx Status: ";
+    FILE* fp = popen("systemctl is-active nginx", "r");
+    if (fp == nullptr) {
+        nginxStatus += "Error fetching Nginx status";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            nginxStatus += buffer;
+        }
+        fclose(fp);
+    }
+    return nginxStatus;
+}
+
+std::string FetchApacheStatus() {
+    char buffer[128];
+    std::string apacheStatus = "Apache Status: ";
+    FILE* fp = popen("systemctl is-active apache2", "r");
+    if (fp == nullptr) {
+        apacheStatus += "Error fetching Apache status";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            apacheStatus += buffer;
+        }
+        fclose(fp);
+    }
+    return apacheStatus;
+}
+std::string FetchWingsStatus() {
+    char buffer[128];
+    std::string wingsStatus = "Wings Status: ";
+    FILE* fp = popen("systemctl is-active wings", "r");
+    if (fp == nullptr) {
+        wingsStatus += "Error fetching Wings status";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            wingsStatus += buffer;
+        }
+        fclose(fp);
+    }
+    return wingsStatus;
+}
+
+std::string FetchDockerStatus() {
+    char buffer[128];
+    std::string dockerStatus = "Docker Status: ";
+    FILE* fp = popen("systemctl is-active docker", "r");
+    if (fp == nullptr) {
+        dockerStatus += "Error fetching Docker status";
+    } else {
+        while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+            dockerStatus += buffer;
+        }
+        fclose(fp);
+    }
+    return dockerStatus;
+}
+
+
+
 void SetupImGui(GLFWwindow* window)
 {
     IMGUI_CHECKVERSION();
@@ -215,8 +280,12 @@ void RenderImGui()
         ImGui::Text("Help Screen:");
         ImGui::Text("P - Toggle Ping UI");
         ImGui::Text("L - Toggle Logs Window");
+        ImGui::Text("C - Show/Hide CronJob Screen");
+        ImGui::Text("N - Toglle Service Status Screen");
         ImGui::Text("I - Toggle Network Monitor");
+        ImGui::Text("K - Toggle Application Info");
         ImGui::Text("H - Show/Hide this Help Screen");
+
 
         ImGui::End();
     }
@@ -299,6 +368,35 @@ void RenderImGui()
 
         ImGui::End();
     }
+    if (showNginxStatus)
+    {
+        ImGui::Begin("Service Status");
+
+        std::string nginxStatus = FetchNginxStatus();
+        ImGui::Text("%s", nginxStatus.c_str());  // Display Nginx status
+
+        std::string apacheStatus = FetchApacheStatus();  // Fetch Apache status
+        ImGui::Text("%s", apacheStatus.c_str());  // Display Apache status
+
+        std::string wingsStatus = FetchWingsStatus();
+        ImGui::Text("%s", wingsStatus.c_str());  // Display Wings status
+        
+        std::string dockerStatus = FetchDockerStatus();
+        ImGui::Text("%s", dockerStatus.c_str());  // Display Wings status
+
+        ImGui::End();
+    }
+    if (showInfoStatus)
+    {
+        ImGui::Begin("Application Info");
+
+        ImGui::Text("Bunasa");
+        ImGui::Text("Author: Allexander B");
+        ImGui::Text("Codename: %s", CODENAME.c_str());
+        ImGui::Text("Version: %.2f", VERSION); 
+
+        ImGui::End();
+    }
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -347,10 +445,17 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
         showSystemInfo = !showSystemInfo;
     }
 
-    if (key == GLFW_KEY_C && action == GLFW_PRESS) 
+    if (key == GLFW_KEY_C && action == GLFW_PRESS)  // Press 'C' to toggle cron jobs window
     {
         showCronJobs = !showCronJobs;
     }
+    if (key == GLFW_KEY_N && action == GLFW_PRESS) {
+        showNginxStatus = !showNginxStatus;  // Add this to toggle Nginx status display
+    }
+    if (key == GLFW_KEY_K && action == GLFW_PRESS) {
+        showInfoStatus = !showInfoStatus;  // Add this to toggle Nginx status display
+    }
+
 }
 
 int main()

@@ -40,3 +40,7 @@ target_link_libraries(bunasa_mandarin
     OpenGL::GL 
     dl
 )
+
+# Find and link libcurl
+find_package(CURL REQUIRED)
+target_link_libraries(bunasa_mandarin CURL::libcurl)
